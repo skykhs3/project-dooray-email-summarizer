@@ -1,16 +1,21 @@
 {
-  "name": "AI Summarizer",
-  "version": "1.0",
   "manifest_version": 3,
-  "description": "이메일 내용 요약기입니다.",
-  "permissions": ["tabs", "activeTab", "storage","background","scripting"],
-  "host_permissions": ["https://kaist.gov-dooray.com/mail/systems/*"],
-  "action": {
-    "default_icon": "images/icon-128.png"
-  },
+  "name": "Dooray Mail Summarizer",
+  "version": "1.0",
+  "description": "Dooray 메일 내용을 요약하여 목록 창에 표시합니다.",
+  "permissions": ["scripting", "activeTab", "storage","webRequest"],
+  "host_permissions": ["https://kaist.gov-dooray.com/*"],
   "background": {
     "service_worker": "background.js"
   },
   "content_scripts": [
-  ]
+    {
+      "matches": ["https://kaist.gov-dooray.com/*"],
+      "js": ["content.js"]
+    }
+  ],
+  "action": {
+    "default_icon": "images/icon-128.png",
+    "default_popup": "popup.html"
+  }
 }
