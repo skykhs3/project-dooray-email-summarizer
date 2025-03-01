@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Dooray Mail Summarizer",
-  "version": "1.0",
+  "version": "1.0.1",
   "description": "Dooray 메일 내용을 요약하여 목록 창에 표시합니다.",
   "permissions": ["scripting", "activeTab", "storage","webRequest"],
   "host_permissions": ["https://kaist.gov-dooray.com/*"],
