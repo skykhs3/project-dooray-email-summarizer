@@ -11,20 +11,6 @@
 </head>
 <body>
   <h2>📩 Dooray 메일 요약</h2>
-  <button id="fetchSummaries">📌 요약 가져오기</button>
   <p id="status"></p>
-
-  <script>
-    document.getElementById("fetchSummaries").addEventListener("click", () => {
-      document.getElementById("status").innerText = "요약 진행 중...";
-      chrome.storage.local.get("summaries", (data) => {
-        if (data.summaries) {
-          document.getElementById("status").innerText = "✅ 요약이 목록에 추가되었습니다.";
-        } else {
-          document.getElementById("status").innerText = "❌ 요약을 찾을 수 없습니다.";
-        }
-      });
-    });
-  </script>
 </body>
 </html>
