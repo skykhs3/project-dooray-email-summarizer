@@ -52,28 +52,72 @@ async function mainFunction(tabId, apiUrl) {
     return response?.result?.contents || [];
   };
 
-  const fetchEmailContents = async (emailList) => {
-    const emailContents = {};
-    await Promise.all(
+  const getCachedContent = async (emailId) => {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(["content_" + emailId], (result) =>
+        resolve(result["content_" + emailId])
+      );
+    });
+  };
+
+  const setCachedContent = async (emailId, content) => {
+    chrome.storage.local.set({ ["content_" + emailId]: content });
+  };
+
+  const getCachedSummary = async (emailId) => {
+    return new Promise((resolve) => {
+      chrome.storage.local.get(["summary_" + emailId], (result) =>
+        resolve(result["summary_" + emailId])
+      );
+    });
+  };
+
+  const setCachedSummary = async (emailId, summary) => {
+    chrome.storage.local.set({ ["summary_" + emailId]: summary });
+  };
+
+  const divideEmailList = async (emailList) => {
+    const cachedEmailList = await Promise.all(
       emailList.map(async (email, index) => {
-        const cachedSummary = await new Promise((resolve) => {
-          chrome.storage.local.get([email.id], (result) =>
-            resolve(result[email.id])
-          );
-        });
+        const content = await getCachedContent(email.id);
+        const summary = await getCachedSummary(email.id);
+        return {
+          content: content,
+          summary: summary,
+          id: email.id,
+          index: index,
+        };
+      })
+    );
 
-        if (cachedSummary) {
-          emailContents[index] = {
-            summary: cachedSummary,
-            id: email.id,
-          };
-          return;
-        }
+    const contentAndSummaryCached = [];
+    const contentCached = [];
+    const noCached = [];
 
+    for (const cachedEmail of cachedEmailList) {
+      if (cachedEmail.content && cachedEmail.summary) {
+        contentAndSummaryCached.push(cachedEmail);
+      } else if (cachedEmail.content && !cachedEmail.summary) {
+        contentCached.push(cachedEmail);
+      } else {
+        noCached.push(cachedEmail);
+      }
+    }
+
+    return { contentAndSummaryCached, contentCached, noCached };
+  };
+
+  const fetchEmailContents = async (emailList) => {
+    const emailContents = [];
+    await Promise.all(
+      emailList.map(async (email) => {
         const emailResponse = await fetchWithRetryJson(
           `https://kaist.gov-dooray.com/v2/wapi/mails/${email.id}?render=html`,
           { method: "GET" }
         );
+        console.log(email.id);
+        const content = emailResponse?.result?.content?.body?.content || "";
+        setCachedContent(email.id, content);
         if (!emailResponse.result.content.mail.flags.read) {
           fetchWithRetryJson(
             `https://kaist.gov-dooray.com/v2/wapi/mails/unread`,
@@ -88,44 +132,22 @@ async function mainFunction(tabId, apiUrl) {
             }
           );
         }
-        emailContents[index] = {
-          content: emailResponse?.result?.content?.body?.content || "",
-          id: email.id,
-        };
+
+        emailContents.push({ ...email, content: content });
       })
     );
     return emailContents;
   };
 
-  const showSummarizedEmails = async (emailContents, initWebUrl) => {
+  const fetchLLM = async (emailContents, initWebUrl) => {
     const apiKey = await new Promise((resolve) => {
       chrome.storage.local.get(["apiToken"], (result) =>
         resolve(result.apiToken)
       );
     });
 
-    emailContents = Object.values(emailContents);
-    let currentUrl = window.location.href;
-
-    for (let i = 0; i < emailContents.length; i++) {
-      currentUrl = window.location.href;
-      if (initWebUrl != currentUrl) return;
-
-      const cachedSummary = emailContents[i].summary;
-
-      if (cachedSummary) {
-        currentUrl = window.location.href;
-        if (initWebUrl != currentUrl) return;
-        updateDomWithOneSummary(cachedSummary, i);
-        continue;
-      }
-    }
-
-    for (let i = 0; i < emailContents.length; i++) {
-      const cachedSummary = emailContents[i].summary;
-      if (cachedSummary) continue;
-
-      console.log("🔹 요약 요청 메시지:", emailContents[i]);
+    for (const email of emailContents) {
+      console.log("🔹 요약 요청 메시지:", email);
       const responseData = await fetchWithRetryJson(
         "https://api.openai.com/v1/chat/completions",
         {
@@ -144,7 +166,7 @@ async function mainFunction(tabId, apiUrl) {
               },
               {
                 role: "user",
-                content: `email:\n\n${emailContents[i].content}`,
+                content: `email:\n\n${email.content}`,
               },
             ],
             max_tokens: 1024,
@@ -152,14 +174,13 @@ async function mainFunction(tabId, apiUrl) {
           }),
         }
       );
-
       const summary = responseData?.choices[0]?.message?.content;
       console.log("🔹 요약 결과:", summary);
-      chrome.storage.local.set({ [emailContents[i].id]: summary });
+      setCachedSummary(email.id, summary);
 
       currentUrl = window.location.href;
       if (initWebUrl != currentUrl) return;
-      updateDomWithOneSummary(summary, i);
+      updateDomWithOneSummary(summary, email.index);
     }
   };
 
@@ -214,14 +235,29 @@ async function mainFunction(tabId, apiUrl) {
     }
   };
 
-  try {
-    const initWebUrl = window.location.href;
-    const emailList = await getEmailList(apiUrl);
-    if (!emailList.length) return console.warn("📭 이메일이 없습니다.");
+  const summary = async () => {
+    try {
+      const initWebUrl = window.location.href;
+      const emailList = await getEmailList(apiUrl);
+      if (!emailList.length) return console.warn("📭 이메일이 없습니다.");
+      const { contentAndSummaryCached, contentCached, noCached } =
+        await divideEmailList(emailList);
 
-    const emailContents = await fetchEmailContents(emailList);
-    await showSummarizedEmails(emailContents, initWebUrl);
-  } catch (error) {
-    console.error("⚠️ 이메일 데이터 처리 중 오류 발생:", error);
-  }
+      console.log(contentAndSummaryCached, contentCached, noCached);
+
+      if (initWebUrl == window.location.href) {
+        contentAndSummaryCached.forEach((email) => {
+          updateDomWithOneSummary(email.summary, email.index);
+        });
+      }
+
+      const emails = await fetchEmailContents(noCached);
+      console.log("emails", emails.concat(contentCached));
+      await fetchLLM(emails.concat(contentCached), initWebUrl);
+    } catch (error) {
+      console.error("⚠️ 이메일 데이터 처리 중 오류 발생:", error);
+    }
+  };
+
+  summary();
 }
