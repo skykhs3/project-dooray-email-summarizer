@@ -1,6 +1,5 @@
 chrome.webRequest.onCompleted.addListener(
   async (details) => {
-    console.log("API 요청 감지:", details.url, details.tabId);
     if (details.url.includes("&version=1")) return;
 
     const consent = await new Promise((resolve) => {
@@ -8,8 +7,6 @@ chrome.webRequest.onCompleted.addListener(
         resolve(result.consent)
       );
     });
-
-    console.log("✅ 사용자 동의 상태:", consent);
 
     if (!consent) return;
 
@@ -31,7 +28,6 @@ async function mainFunction(tabId, apiUrl) {
     retries = 10,
     delayMs = 1000
   ) => {
-    console.log("🔄 Fetch 요청 시작:", url);
     for (let i = 0; i < retries; i++) {
       const response = await fetch(url, options);
       if (response.ok) return response.json();
@@ -60,6 +56,20 @@ async function mainFunction(tabId, apiUrl) {
     const emailContents = {};
     await Promise.all(
       emailList.map(async (email, index) => {
+        const cachedSummary = await new Promise((resolve) => {
+          chrome.storage.local.get([email.id], (result) =>
+            resolve(result[email.id])
+          );
+        });
+
+        if (cachedSummary) {
+          emailContents[index] = {
+            summary: cachedSummary,
+            id: email.id,
+          };
+          return;
+        }
+
         const emailResponse = await fetchWithRetryJson(
           `https://kaist.gov-dooray.com/v2/wapi/mails/${email.id}?render=html`,
           { method: "GET" }
@@ -101,19 +111,19 @@ async function mainFunction(tabId, apiUrl) {
       currentUrl = window.location.href;
       if (initWebUrl != currentUrl) return;
 
-      const cachedSummary = await new Promise((resolve) => {
-        chrome.storage.local.get([emailContents[i].id], (result) =>
-          resolve(result[emailContents[i].id])
-        );
-      });
+      const cachedSummary = emailContents[i].summary;
 
       if (cachedSummary) {
-        console.log(`📂 캐시된 요약 불러오기: ${cachedSummary}`);
         currentUrl = window.location.href;
         if (initWebUrl != currentUrl) return;
         updateDomWithOneSummary(cachedSummary, i);
         continue;
       }
+    }
+
+    for (let i = 0; i < emailContents.length; i++) {
+      const cachedSummary = emailContents[i].summary;
+      if (cachedSummary) continue;
 
       console.log("🔹 요약 요청 메시지:", emailContents[i]);
       const responseData = await fetchWithRetryJson(
@@ -209,10 +219,7 @@ async function mainFunction(tabId, apiUrl) {
     const emailList = await getEmailList(apiUrl);
     if (!emailList.length) return console.warn("📭 이메일이 없습니다.");
 
-    console.log("📩 이메일 목록:", emailList);
     const emailContents = await fetchEmailContents(emailList);
-    console.log("📜 이메일 본문:", emailContents);
-
     await showSummarizedEmails(emailContents, initWebUrl);
   } catch (error) {
     console.error("⚠️ 이메일 데이터 처리 중 오류 발생:", error);
