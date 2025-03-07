@@ -12,7 +12,7 @@
 ## 설치 방법
 
 1. **크롬 웹 스토어에서 확장 프로그램 다운로드**
-   - 아직 다운로드 링크가 없으므로 [GitHub](https://github.com/skykhs3/project-dooray-email-summarizer)에서 직접 설치합니다.
+   - [chrome 웹 스토어](https://chromewebstore.google.com/detail/dooray-mail-summarizer/cgmlaihdnopmeddppebdchfknlpeeiap)에서 직접 설치합니다.
 
 2. **개발자 모드에서 확장 프로그램 추가**
    1. [GitHub 프로젝트 페이지](https://github.com/skykhs3/project-dooray-email-summarizer)에서 소스 코드 파일을 다운로드합니다.
